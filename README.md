@@ -1,36 +1,51 @@
 # 🐧 Intel Wi-Fi 7 BE201 on Ubuntu 22.04 (Jammy)
-I was stuck for 5 hours and [this website](https://www.intel.com/content/www/us/en/support/articles/000005511/wireless.html) finally helped me realize that for the WiFi card my computer has (Intel® Wi-Fi 7 BE201), the Ubuntu Kernel must be 6.11+
 
-This prompted the following (used chatgpt to summarize my steps and reasoning, there may be weirdness but the main point is that you do mainline kernel changes and then it basically works except for some headers that you can then get rid of. Only drawbacks so far are that booting up seems to take forever when computer is off/rebooting/etc)
 ## Why this was needed
 - The Intel Wi-Fi 7 BE201 (PCI ID 8086:7740) is only supported starting with Linux kernel 6.11+.
 - Ubuntu 22.04 ships with older kernels (5.15 LTS, 6.5 HWE, 6.8), which do not recognize BE201.
 - Even if firmware is present in /lib/firmware, the old kernel’s driver (iwlwifi) cannot use it.
 - Solution: install a mainline kernel ≥ 6.11 and ensure firmware blobs are present.
 
+## My steps:
+Install of Ubuntu 22.04 on new DellPro16Plus didn't have access to Wifi chip
+First solution was to update drivers. Failed because kernel wasn't compatible with them
+I was stuck for 5 hours and [this website](https://www.intel.com/content/www/us/en/support/articles/000005511/wireless.html) finally helped me realize that for the WiFi card my computer has (Intel® Wi-Fi 7 BE201), the Ubuntu Kernel must be 6.11+
+Then update kernel to kernel 16.xx.xx (latest) caused massive slowdown in the boot time (~2mins)
+
+## Punchline:
+1. Update kernel to the last 6.11.xx version (meets the minimum requirements needed while not risking being too modern and unstable/broken drivers/etc. it also has all the patches for the 6.11 kernel family and should be more stable than all other 6.11 versions)
+2. This will cause kernel header issues so delete them
+3. Last step is updating the drivers
+4. Reboot to make changes show up
+
 ---
 
 ## Steps taken
 
 ### 1. Install Mainline Kernel Installer
-Command:
+You won't have Wi-Fi so connect to internet via ethernet or connect your iphone via USB and it'll automatically hotspot
+```bash
     sudo add-apt-repository ppa:cappelikan/ppa
     sudo apt update
     sudo apt install -y mainline
-
+```
 Explanation:
 - Adds a PPA with the `mainline` tool.
 - `mainline` fetches kernels directly from kernel.ubuntu.com/mainline.
-
 ---
 
 ### 2. Install the latest kernel (≥ 6.11)
-Command:
-    mainline install-latest
+To see the full list of available kernels:
+```bash
+    mainline list
+```
 
+The most stable kernel in the 6.11 family will the the one at the top (aka the most recent). It should be 6.11.11
+```bash
+    mainline install 6.11.11
+```
 Explanation:
-- Downloads and installs the newest available kernel.
-- In this case: 6.16.6.
+- Downloads and installs the desired kernel
 - Packages installed: linux-image, linux-modules, linux-headers.
 
 Note:
@@ -42,29 +57,57 @@ Note:
 
 ---
 
-### 3. Reboot into the new kernel
-Command:
-    sudo reboot
+### 3. Remove headers
+Check which broken packages are hanging around
+```bash
+    dpkg -l | grep 6.11.11
+```
+You’ll probably see things like:
+- linux-headers-6.11.11-061111-generic
+- linux-headers-6.11.11-061111
+- Maybe linux-modules-… too
 
-Verify:
-    uname -r
-Expected:
-    6.16.6-061606-generic
-
----
-
-### 4. Remove broken headers (clean up APT)
-Command:
-    sudo dpkg --remove --force-depends linux-headers-6.16.6-061606-generic linux-headers-6.16.6-061606
-    sudo apt -f install
-
+Remove broken headers
+``bash
+    sudo dpkg --remove --force-depends linux-headers-6.11.11-061111-generic linux-headers-6.11.11-061111
+    sudo apt --fix-broken install
+    sudo apt autoremove -y
+```
 Explanation:
 - Removes unconfigurable headers that leave APT in a broken state.
 - Keeps kernel image + modules (what you need).
 
----
+### 4. Reinstall linux-firmware
+This command will give you info on what isn't working / what's missing and where to find what is missing:
+```bash
+    sudo dmesg | grep iwlwifi | tail -n 20
+```
 
-### 5. Firmware for Intel BE201
+If not working, it'll say what the minimum / maximum version of the drivers are that you will need and also where to find them potentially. The next command will tell you how to get the drivers/firmware automatially wihout doing it all by hand by git cloning/downloading from here
+
+This will install the new drivers for the kernel and make wifi work
+```
+    sudo apt install --reinstall linux-firmware
+```
+
+### 5. Reboot into the new kernel and verify
+```bash
+    sudo reboot
+```
+
+Verify:
+```bash
+    uname -r
+    nmcli device status
+    sudo dmesg | grep iwlwifi | tail -n 20
+```
+Expected:
+- make sure the kernel is 6.11.11
+- nmcli should be: one line with `wifi` type.
+- nmcli status: state = connected or disconnected (not unavailable).
+- the last command is the one that told you what was missing and where to get it. it should return everything good now
+
+### Firmware for Intel BE201
 - The BE201 requires firmware files (.ucode + .pnvm) in /lib/firmware.
 - On this system, the needed files were already present:
     iwlwifi-bz-b0-fm-c0-92.ucode
@@ -75,54 +118,4 @@ Explanation:
     iwlwifi-bz-b0-fm-c0-98.ucode
     iwlwifi-bz-b0-fm-c0-100.ucode
     iwlwifi-bz-b0-fm-c0.pnvm
-- The 6.16 driver successfully loaded these and brought the Wi-Fi card up.
-- Without the new kernel, these blobs alone wouldn’t work.
 
-Check what firmware was loaded:
-    sudo dmesg | grep iwlwifi | grep 'loaded firmware'
-
----
-
-### 6. Verify Wi-Fi is working
-Command:
-    nmcli device status
-
-Expected:
-- One line with `wifi` type.
-- State = connected or disconnected (not unavailable).
-
----
-
-## 📌 Summary
-1. Installed mainline kernel 6.16.6 using the `mainline` tool.
-2. Removed broken headers that depended on newer Ubuntu libraries.
-3. Rebooted into the new kernel (`uname -r` → 6.16.6).
-4. Kernel driver (iwlwifi) now supports Intel Wi-Fi 7 BE201.
-5. Firmware (bz-b0-fm-c0-*) was already in /lib/firmware, so Wi-Fi came up immediately.
-6. Verified Wi-Fi works via `nmcli`.
-
----
-
-## 🛠 Optional: Lock default kernel
-Command:
-    grep "GRUB_DEFAULT" /etc/default/grub
-Then change the line to:
-    GRUB_DEFAULT="Advanced options for Ubuntu>Ubuntu, with Linux 6.16.6-061606-generic"
-
-Finally update GRUB:
-    sudo update-grub
-
-Explanation:
-- Ensures GRUB always boots into the new kernel by default.
-- Prevents fallback to 6.8 unless manually selected.
-
----
-
-## 🔍 Troubleshooting
-- If Wi-Fi disappears after an update:
-      uname -r                 # check if you booted into 6.16
-      sudo dmesg | grep iwlwifi | tail -n 40   # check firmware load
-      nmcli device status      # confirm device state
-- If APT breaks again:
-      sudo apt -f install
-- If GRUB reverts to old kernel, repeat the GRUB_DEFAULT step.
