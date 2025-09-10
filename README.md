@@ -110,7 +110,6 @@ Expected:
 
 ### Firmware for Intel BE201
 - The BE201 requires firmware files (.ucode + .pnvm) in /lib/firmware.
-- On this system, the needed files were already present:
     - iwlwifi-bz-b0-fm-c0-92.ucode
     - iwlwifi-bz-b0-fm-c0-93.ucode
     - iwlwifi-bz-b0-fm-c0-94.ucode
