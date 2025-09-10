@@ -68,7 +68,7 @@ You’ll probably see things like:
 - Maybe linux-modules-… too
 
 Remove broken headers
-``bash
+```bash
     sudo dpkg --remove --force-depends linux-headers-6.11.11-061111-generic linux-headers-6.11.11-061111
     sudo apt --fix-broken install
     sudo apt autoremove -y
@@ -77,7 +77,7 @@ Explanation:
 - Removes unconfigurable headers that leave APT in a broken state.
 - Keeps kernel image + modules (what you need).
 
-### 4. hi
+### 4. Update linux firmware/drivers according to the new kernel
 
 This command will give you info on what isn't working / what's missing and where to find what is missing:
 ```bash
