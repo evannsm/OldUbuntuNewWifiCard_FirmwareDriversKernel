@@ -77,6 +77,8 @@ Explanation:
 - Removes unconfigurable headers that leave APT in a broken state.
 - Keeps kernel image + modules (what you need).
 
+---
+
 ### 4. Reinstall linux-firmware
 This command will give you info on what isn't working / what's missing and where to find what is missing:
 ```bash
